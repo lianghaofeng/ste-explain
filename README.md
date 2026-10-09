@@ -4,7 +4,6 @@
 
 让 Claude 解释代码、diff、CI 结果、排查结论时，按 ASD-STE100 的结构规则写中文。ASD-STE100 是 Simplified Technical English，航空维修手册用的受控语言规范。规则是一句一事、句长有上限、一词一义、保留原文的不确定程度，部件多时附一张 mermaid 图。默认取 Karpathy 2026 年 10 月提出的「80% of the way to ASD-STE100」刻度。
 
-它只管句子结构与解释的组织方式。用词、翻译腔、文档结构交给中文写作类 skill。
 
 ## 1. 安装
 
@@ -68,7 +67,7 @@ python3 -m unittest scripts/test_ste_check.py
 | 检查 | 规则 | 输出 |
 | --- | --- | --- |
 | 句长 | 一个句号内字数超过上限（默认 45；CJK 一字算 1，ASCII 串算 1） | `文件:行号 [句长] 68 字，上限 45：<前 30 字>` |
-| 同义词轮换 | 同一文档里同一组词出现两个以上，组在 `references/synonyms.txt` | `文件 [同义词] 检查 / 验证 同组出现 2 个词：检查 第 12、30 行；验证 第 18 行` |
+| 同义词轮换 | 同一文档里同一组词出现两个以上，组在 `references/synonyms.txt` | `文件 [同义词] 检查 / 校验 同组出现 2 个词：检查 第 12、30 行；校验 第 18 行` |
 
 ```bash
 python3 scripts/ste_check.py 文件.md               # 只提示
