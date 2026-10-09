@@ -49,5 +49,57 @@ class SplitAndCountTest(unittest.TestCase):
         self.assertEqual(ste_check.count_units("，。！"), 0)
 
 
+class LengthCheckTest(unittest.TestCase):
+    def test_long_sentence_reported_with_line(self):
+        text = "短句。\n" + "字" * 46 + "。"
+        found = ste_check.check_length(text, 45, "t.md")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["line"], 2)
+        self.assertEqual(found[0]["count"], 46)
+        self.assertEqual(found[0]["rule"], "sentence-length")
+        self.assertIn("t.md:2 [句长] 46 字，上限 45：", found[0]["message"])
+
+    def test_sentence_at_limit_not_reported(self):
+        self.assertEqual(ste_check.check_length("字" * 45 + "。", 45, "t.md"), [])
+
+    def test_excerpt_truncated_to_30(self):
+        text = "字" * 60 + "。"
+        found = ste_check.check_length(text, 45, "t.md")
+        self.assertTrue(found[0]["excerpt"].endswith("…"))
+        self.assertEqual(len(found[0]["excerpt"]), 31)
+
+
+class CliTest(unittest.TestCase):
+    def _run(self, argv, stdin=""):
+        out = io.StringIO()
+        sys.stdin = io.StringIO(stdin)
+        try:
+            with redirect_stdout(out):
+                code = ste_check.main(argv)
+        finally:
+            sys.stdin = sys.__stdin__
+        return code, out.getvalue()
+
+    def test_stdin_default_exit_zero(self):
+        code, out = self._run(["--max-len", "5"], stdin="一二三四五六。")
+        self.assertEqual(code, 0)
+        self.assertIn("<stdin>:1 [句长] 6 字，上限 5", out)
+
+    def test_strict_exit_one(self):
+        code, _ = self._run(["--strict", "--max-len", "5"], stdin="一二三四五六。")
+        self.assertEqual(code, 1)
+
+    def test_strict_clean_exit_zero(self):
+        code, out = self._run(["--strict", "--max-len", "5"], stdin="一二三。")
+        self.assertEqual(code, 0)
+        self.assertEqual(out, "")
+
+    def test_json_output(self):
+        code, out = self._run(["--json", "--max-len", "5"], stdin="一二三四五六。")
+        data = json.loads(out)
+        self.assertEqual(data[0]["rule"], "sentence-length")
+        self.assertEqual(data[0]["count"], 6)
+
+
 if __name__ == "__main__":
     unittest.main()

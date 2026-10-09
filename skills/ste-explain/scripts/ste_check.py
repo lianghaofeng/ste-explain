@@ -83,3 +83,59 @@ def split_sentences(line):
 def count_units(s):
     """字数：一个 CJK 字符算 1，连续的 ASCII 字母数字下划线串算 1，标点与空白不计。"""
     return len(CJK.findall(s)) + len(ASCII_RUN.findall(s))
+
+
+def check_length(text, max_len, fname):
+    """报出字数超过 max_len 的句子，带行号与前 30 字摘录。"""
+    findings = []
+    for no, line in clean_lines(text):
+        for s in split_sentences(line):
+            n = count_units(s)
+            if n > max_len:
+                excerpt = s if len(s) <= 30 else s[:30] + "…"
+                findings.append({
+                    "file": fname, "line": no, "rule": "sentence-length",
+                    "count": n, "limit": max_len, "excerpt": excerpt,
+                    "message": f"{fname}:{no} [句长] {n} 字，上限 {max_len}：{excerpt}",
+                })
+    return findings
+
+
+def _read_sources(paths):
+    """没有文件参数时读标准输入，文件名记为 <stdin>。"""
+    if not paths:
+        return [("<stdin>", sys.stdin.read())]
+    out = []
+    for p in paths:
+        with open(p, encoding="utf-8") as f:
+            out.append((p, f.read()))
+    return out
+
+
+def run(paths, max_len, syn_path, as_json):
+    """跑全部检查，按 --json 决定输出形式，返回命中数。"""
+    findings = []
+    for name, text in _read_sources(paths):
+        findings += check_length(text, max_len, name)
+    if as_json:
+        print(json.dumps(findings, ensure_ascii=False, indent=2))
+    else:
+        for f in findings:
+            print(f["message"])
+    return len(findings)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="中文句长与同义词轮换检查")
+    ap.add_argument("paths", nargs="*", help="要检查的文件，缺省读标准输入")
+    ap.add_argument("--max-len", type=int, default=DEFAULT_MAX_LEN, help=f"句长上限，默认 {DEFAULT_MAX_LEN}")
+    ap.add_argument("--synonyms", default=DEFAULT_SYNONYMS, help="同义词组文件")
+    ap.add_argument("--strict", action="store_true", help="有命中时退出码 1")
+    ap.add_argument("--json", action="store_true", help="结构化输出")
+    args = ap.parse_args(argv)
+    hits = run(args.paths, args.max_len, args.synonyms, args.json)
+    return 1 if (args.strict and hits) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
