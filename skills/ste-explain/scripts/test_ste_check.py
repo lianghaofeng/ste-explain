@@ -101,5 +101,66 @@ class CliTest(unittest.TestCase):
         self.assertEqual(data[0]["count"], 6)
 
 
+class SynonymTest(unittest.TestCase):
+    GROUPS = [["检查", "校验", "验证", "确认"], ["删除", "移除", "清除"]]
+    EXC = ["验证码", "检查点"]
+
+    def test_two_words_same_group_reported(self):
+        text = "先检查日志。\n再验证结果。\n最后检查输出。"
+        found = ste_check.check_synonyms(text, self.GROUPS, self.EXC, "t.md")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["rule"], "synonym-rotation")
+        self.assertEqual(found[0]["words"], {"检查": [1, 3], "验证": [2]})
+        self.assertEqual(found[0]["message"], "t.md [同义词] 检查 / 验证 同组出现 2 个词：检查 第 1、3 行；验证 第 2 行")
+
+    def test_single_word_not_reported(self):
+        text = "先检查日志。\n再检查结果。"
+        self.assertEqual(ste_check.check_synonyms(text, self.GROUPS, self.EXC, "t.md"), [])
+
+    def test_exception_word_removed(self):
+        text = "先检查日志。\n输入验证码。"
+        self.assertEqual(ste_check.check_synonyms(text, self.GROUPS, self.EXC, "t.md"), [])
+
+    def test_code_block_ignored(self):
+        text = "先检查日志。\n```\n验证\n```"
+        self.assertEqual(ste_check.check_synonyms(text, self.GROUPS, self.EXC, "t.md"), [])
+
+    def test_load_synonyms_file(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write("# 注释\n检查/校验/验证/确认\n\n删除/移除/清除\n!验证码\n!检查点\n单词\n")
+            path = f.name
+        groups, exc = ste_check.load_synonyms(path)
+        os.unlink(path)
+        self.assertEqual(groups, self.GROUPS)
+        self.assertEqual(exc, self.EXC)
+
+    def test_run_includes_synonyms(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write("检查/验证\n")
+            syn = f.name
+        out = io.StringIO()
+        sys.stdin = io.StringIO("先检查。\n再验证。")
+        try:
+            with redirect_stdout(out):
+                hits = ste_check.run([], 45, syn, False)
+        finally:
+            sys.stdin = sys.__stdin__
+            os.unlink(syn)
+        self.assertEqual(hits, 1)
+        self.assertIn("[同义词] 检查 / 验证", out.getvalue())
+
+    def test_run_without_synonym_file(self):
+        out = io.StringIO()
+        sys.stdin = io.StringIO("先检查。\n再验证。")
+        try:
+            with redirect_stdout(out):
+                hits = ste_check.run([], 45, "/nonexistent/synonyms.txt", False)
+        finally:
+            sys.stdin = sys.__stdin__
+        self.assertEqual(hits, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

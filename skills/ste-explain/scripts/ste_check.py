@@ -101,6 +101,49 @@ def check_length(text, max_len, fname):
     return findings
 
 
+def load_synonyms(path):
+    """读同义词组文件。# 开头是注释，! 开头是例外词，其余每行一组、以 / 分隔，少于两个词的行忽略。"""
+    groups, exceptions = [], []
+    with open(path, encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            if ln.startswith("!"):
+                exceptions.append(ln[1:].strip())
+                continue
+            words = [w.strip() for w in ln.split("/") if w.strip()]
+            if len(words) >= 2:
+                groups.append(words)
+    return groups, exceptions
+
+
+def check_synonyms(text, groups, exceptions, fname):
+    """以文件为单位统计：同一组内出现两个以上不同的词即报，列出每个词的行号。
+
+    先把例外词从每行抹掉再找组内词，所以「验证码」不算「验证」出现。
+    """
+    lines = []
+    for no, line in clean_lines(text):
+        for ex in exceptions:
+            line = line.replace(ex, " ")
+        lines.append((no, line))
+    findings = []
+    for group in groups:
+        seen = {}
+        for no, line in lines:
+            for w in group:
+                if w in line:
+                    seen.setdefault(w, []).append(no)
+        if len(seen) >= 2:
+            detail = "；".join(f"{w} 第 {'、'.join(map(str, nos))} 行" for w, nos in seen.items())
+            findings.append({
+                "file": fname, "rule": "synonym-rotation", "words": seen,
+                "message": f"{fname} [同义词] {' / '.join(seen)} 同组出现 {len(seen)} 个词：{detail}",
+            })
+    return findings
+
+
 def _read_sources(paths):
     """没有文件参数时读标准输入，文件名记为 <stdin>。"""
     if not paths:
@@ -113,10 +156,12 @@ def _read_sources(paths):
 
 
 def run(paths, max_len, syn_path, as_json):
-    """跑全部检查，按 --json 决定输出形式，返回命中数。"""
+    """跑全部检查，按 --json 决定输出形式，返回命中数。同义词文件不存在时跳过该项。"""
+    groups, exceptions = load_synonyms(syn_path) if os.path.exists(syn_path) else ([], [])
     findings = []
     for name, text in _read_sources(paths):
         findings += check_length(text, max_len, name)
+        findings += check_synonyms(text, groups, exceptions, name)
     if as_json:
         print(json.dumps(findings, ensure_ascii=False, indent=2))
     else:
