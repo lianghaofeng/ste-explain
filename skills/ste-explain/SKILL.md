@@ -1,6 +1,6 @@
 ---
 name: ste-explain
-description: 按 ASD-STE100 的结构约束写中文解释，默认 80% 刻度。用户显式要求时启用：/ste-explain、「用 STE 解释」「80% STE」「ASD-STE100」「Simplified Technical English」，或要求把一段解释改写得更易懂。不按「解释」「讲讲」这类泛词自动触发。不用于创意与宣传文案。
+description: 按 ASD-STE100 的结构约束写中文解释，默认 80% 刻度。用户显式要求时启用：/ste-explain、「用 STE 解释」「80% STE」「ASD-STE100」「Simplified Technical English」，或要求把一段解释改写得更易懂。只说「解释一下」「讲讲」而没有要求改写时，不自动触发。不用于创意与宣传文案。
 ---
 
 # ste-explain：按 STE 结构约束写中文解释
