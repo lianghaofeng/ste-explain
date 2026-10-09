@@ -2,7 +2,7 @@
 """对中文技术文本做两项确定性检查：句长、同义词轮换。
 
 只检查有唯一答案的规则。一句一事、主动语态这类判断留给 SKILL.md 的规则，
-不在这里猜。默认只提示，--strict 时有命中退出码 1。
+不在这里猜。默认只提示，--strict 时有命中退出码 1；文件读不到或同义词表打不开退出码 2。
 
 用法：
     ste_check.py <文件…>
@@ -22,7 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_SYNONYMS = os.path.join(HERE, "..", "references", "synonyms.txt")
 DEFAULT_MAX_LEN = 45
 
-FENCE = re.compile(r"^\s*(```|~~~)")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 INLINE_CODE = re.compile(r"`[^`]*`")
 LINK_TARGET = re.compile(r"\]\([^)]*\)")
 HTML_COMMENT = re.compile(r"<!--.*?-->")
@@ -33,6 +33,10 @@ ASCII_RUN = re.compile(r"[A-Za-z0-9_]+")
 SENTENCE_END = re.compile(r"[。！？；]")
 
 
+class CheckError(Exception):
+    """文件读不到、同义词表打不开这类运行错误。main 把它打到 stderr 并以退出码 2 结束，与「有命中」的退出码 1 区分。"""
+
+
 def clean_lines(text):
     """返回 [(行号, 清洗后文本)]。
 
@@ -40,13 +44,16 @@ def clean_lines(text):
     这些位置的文字不是给读者读的句子，不计句长，也不参与同义词统计。
     """
     out = []
-    in_fence = False
+    fence = None  # 开栏的 (字符, 长度)；按 CommonMark，关栏要同字符且不短于开栏
     in_comment = False
     for no, raw in enumerate(text.splitlines(), 1):
-        if FENCE.match(raw):
-            in_fence = not in_fence
+        m = FENCE.match(raw)
+        if fence is None and m:
+            fence = (m.group(1)[0], len(m.group(1)))
             continue
-        if in_fence:
+        if fence is not None:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1]:
+                fence = None
             continue
         line = raw
         if in_comment:
@@ -104,7 +111,11 @@ def check_length(text, max_len, fname):
 def load_synonyms(path):
     """读同义词组文件。# 开头是注释，! 开头是例外词，其余每行一组、以 / 分隔，少于两个词的行忽略。"""
     groups, exceptions = [], []
-    with open(path, encoding="utf-8") as f:
+    try:
+        f = open(path, encoding="utf-8")
+    except OSError as e:
+        raise CheckError(f"无法读取同义词表 {path}：{e.strerror or e}")
+    with f:
         for ln in f:
             ln = ln.strip()
             if not ln or ln.startswith("#"):
@@ -150,14 +161,25 @@ def _read_sources(paths):
         return [("<stdin>", sys.stdin.read())]
     out = []
     for p in paths:
-        with open(p, encoding="utf-8") as f:
-            out.append((p, f.read()))
+        try:
+            with open(p, encoding="utf-8") as f:
+                out.append((p, f.read()))
+        except OSError as e:
+            raise CheckError(f"无法读取 {p}：{e.strerror or e}")
+        except UnicodeDecodeError:
+            raise CheckError(f"无法读取 {p}：不是 UTF-8 文本")
     return out
 
 
 def run(paths, max_len, syn_path, as_json):
-    """跑全部检查，按 --json 决定输出形式，返回命中数。同义词文件不存在时跳过该项。"""
-    groups, exceptions = load_synonyms(syn_path) if os.path.exists(syn_path) else ([], [])
+    """跑全部检查，按 --json 决定输出形式，返回命中数。
+
+    syn_path 为 None 时用默认同义词表，默认表不存在就跳过同义词检查；
+    用户显式传入的路径打不开则抛 CheckError，不静默放行。
+    """
+    if syn_path is None:
+        syn_path = DEFAULT_SYNONYMS if os.path.exists(DEFAULT_SYNONYMS) else None
+    groups, exceptions = load_synonyms(syn_path) if syn_path else ([], [])
     findings = []
     for name, text in _read_sources(paths):
         findings += check_length(text, max_len, name)
@@ -174,11 +196,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="中文句长与同义词轮换检查")
     ap.add_argument("paths", nargs="*", help="要检查的文件，缺省读标准输入")
     ap.add_argument("--max-len", type=int, default=DEFAULT_MAX_LEN, help=f"句长上限，默认 {DEFAULT_MAX_LEN}")
-    ap.add_argument("--synonyms", default=DEFAULT_SYNONYMS, help="同义词组文件")
+    ap.add_argument("--synonyms", default=None, help="同义词组文件，默认 references/synonyms.txt")
     ap.add_argument("--strict", action="store_true", help="有命中时退出码 1")
     ap.add_argument("--json", action="store_true", help="结构化输出")
     args = ap.parse_args(argv)
-    hits = run(args.paths, args.max_len, args.synonyms, args.json)
+    try:
+        hits = run(args.paths, args.max_len, args.synonyms, args.json)
+    except CheckError as e:
+        print(e, file=sys.stderr)
+        return 2
     return 1 if (args.strict and hits) else 0
 
 

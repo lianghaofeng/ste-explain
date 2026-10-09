@@ -4,7 +4,7 @@ import json
 import os
 import sys
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ste_check  # noqa: E402
@@ -151,15 +151,66 @@ class SynonymTest(unittest.TestCase):
         self.assertEqual(hits, 1)
         self.assertIn("[同义词] 检查 / 验证", out.getvalue())
 
-    def test_run_without_synonym_file(self):
+    def test_default_synonyms_missing_is_skipped(self):
+        saved = ste_check.DEFAULT_SYNONYMS
+        ste_check.DEFAULT_SYNONYMS = "/nonexistent/default-synonyms.txt"
         out = io.StringIO()
-        sys.stdin = io.StringIO("先检查。\n再验证。")
+        sys.stdin = io.StringIO("先检查。\n再校验。")
         try:
             with redirect_stdout(out):
-                hits = ste_check.run([], 45, "/nonexistent/synonyms.txt", False)
+                hits = ste_check.run([], 45, None, False)
         finally:
             sys.stdin = sys.__stdin__
+            ste_check.DEFAULT_SYNONYMS = saved
         self.assertEqual(hits, 0)
+
+    def test_explicit_missing_synonyms_exits_two(self):
+        out, err = io.StringIO(), io.StringIO()
+        sys.stdin = io.StringIO("先检查。\n再校验。")
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                code = ste_check.main(["--synonyms", "/nonexistent/syn.txt"])
+        finally:
+            sys.stdin = sys.__stdin__
+        self.assertEqual(code, 2)
+        self.assertIn("/nonexistent/syn.txt", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+
+
+class NestedFenceTest(unittest.TestCase):
+    def test_tilde_fence_inside_backtick_fence_is_content(self):
+        text = "```\n" + "字" * 50 + "。\n~~~\n" + "字" * 50 + "。\n```\n正文。"
+        self.assertEqual(ste_check.check_length(text, 45, "t.md"), [])
+        self.assertEqual([no for no, _ in ste_check.clean_lines(text)], [6])
+
+    def test_longer_fence_wraps_shorter_fence(self):
+        text = "````markdown\n```\n" + "字" * 50 + "。\n```\n````\n正文。"
+        self.assertEqual(ste_check.check_length(text, 45, "t.md"), [])
+        self.assertEqual([no for no, _ in ste_check.clean_lines(text)], [6])
+
+
+class FileErrorTest(unittest.TestCase):
+    def test_missing_input_file_exits_two(self):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = ste_check.main(["/nonexistent/input.md"])
+        self.assertEqual(code, 2)
+        self.assertIn("/nonexistent/input.md", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+
+    def test_file_argument_is_reported_with_its_path(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("一二三四五六。\n")
+            path = f.name
+        out = io.StringIO()
+        try:
+            with redirect_stdout(out):
+                code = ste_check.main([path, "--max-len", "5"])
+        finally:
+            os.unlink(path)
+        self.assertEqual(code, 0)
+        self.assertIn(f"{path}:1 [句长] 6 字，上限 5", out.getvalue())
 
 
 if __name__ == "__main__":
