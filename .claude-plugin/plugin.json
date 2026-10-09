@@ -1,0 +1,7 @@
+{
+  "name": "ste-explain",
+  "description": "按 ASD-STE100 结构约束写中文解释：一句一事、句长有上限、一词一义、保留不确定程度，部件多时附 mermaid 图",
+  "author": { "name": "lianghaofeng", "url": "https://github.com/lianghaofeng" },
+  "license": "MIT",
+  "keywords": ["writing", "explanation", "simplified-technical-english"]
+}

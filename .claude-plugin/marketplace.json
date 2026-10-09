@@ -1,0 +1,12 @@
+{
+  "name": "ste-explain",
+  "description": "ste-explain 插件的 marketplace：按 ASD-STE100 结构约束写中文解释",
+  "owner": { "name": "lianghaofeng", "url": "https://github.com/lianghaofeng" },
+  "plugins": [
+    {
+      "name": "ste-explain",
+      "source": "./",
+      "description": "按 ASD-STE100 结构约束写中文解释：一句一事、句长有上限、一词一义、保留不确定程度，部件多时附 mermaid 图"
+    }
+  ]
+}
