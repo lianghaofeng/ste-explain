@@ -328,5 +328,24 @@ class RulesSelectionTest(unittest.TestCase):
         self.assertIn("lengthh", err.getvalue())
 
 
+class BannedStackingTest(unittest.TestCase):
+    def test_explicit_banned_stacks_on_default(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write("PR闸 → PR门禁\n")
+            extra = f.name
+        out = io.StringIO()
+        sys.stdin = io.StringIO("跑通了，但 PR闸 没过。")
+        try:
+            with redirect_stdout(out):
+                code = ste_check.main(["--rules", "banned", "--banned", extra])
+        finally:
+            sys.stdin = sys.__stdin__
+            os.unlink(extra)
+        self.assertEqual(code, 0)
+        self.assertIn("[反面词] 跑通", out.getvalue())
+        self.assertIn("[反面词] PR闸", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

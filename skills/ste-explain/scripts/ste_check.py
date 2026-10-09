@@ -260,7 +260,7 @@ def run(paths, max_len, syn_path, as_json, banned_paths=None, rules=ALL_RULES):
 
     rules 是要跑的检查名集合，取自 ALL_RULES，默认全跑。
     syn_path 为 None 时用默认同义词表，banned_paths 为 None 时用默认反面词表；默认表不存在就跳过该项。
-    用户显式传入的路径打不开则抛 CheckError，不静默放行。多个反面词表叠着查。
+    用户显式传入的路径打不开则抛 CheckError，不静默放行。显式传入的反面词表叠在默认表之上。
     """
     unknown = [r for r in rules if r not in ALL_RULES]
     if unknown:
@@ -268,8 +268,9 @@ def run(paths, max_len, syn_path, as_json, banned_paths=None, rules=ALL_RULES):
     if syn_path is None:
         syn_path = DEFAULT_SYNONYMS if os.path.exists(DEFAULT_SYNONYMS) else None
     groups, exceptions = load_synonyms(syn_path) if syn_path and "synonym" in rules else ([], [])
-    if banned_paths is None:
-        banned_paths = [DEFAULT_BANNED] if os.path.exists(DEFAULT_BANNED) else []
+    # 显式传入的反面词表叠在默认表之上，不替换它：项目行话表只需列自己的词。
+    default_banned = [DEFAULT_BANNED] if os.path.exists(DEFAULT_BANNED) else []
+    banned_paths = default_banned + list(banned_paths or [])
     banned_rules = [r for bp in banned_paths for r in load_banned(bp)] if "banned" in rules else []
     findings = []
     for name, text in _read_sources(paths):
@@ -292,7 +293,7 @@ def main(argv=None):
     ap.add_argument("paths", nargs="*", help="要检查的文件，缺省读标准输入")
     ap.add_argument("--max-len", type=int, default=DEFAULT_MAX_LEN, help=f"句长上限，默认 {DEFAULT_MAX_LEN}")
     ap.add_argument("--synonyms", default=None, help="同义词组文件，默认 references/synonyms.txt")
-    ap.add_argument("--banned", action="append", default=None, help="反面词表，可重复传，默认 references/banned-words.txt")
+    ap.add_argument("--banned", action="append", default=None, help="额外的反面词表，叠在默认表 references/banned-words.txt 之上，可重复传")
     ap.add_argument("--rules", default=",".join(ALL_RULES), help="要跑的检查，逗号分隔：length、synonym、banned，默认全跑")
     ap.add_argument("--strict", action="store_true", help="有命中时退出码 1")
     ap.add_argument("--json", action="store_true", help="结构化输出")
