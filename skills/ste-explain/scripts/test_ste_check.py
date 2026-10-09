@@ -297,5 +297,36 @@ class BannedWordTest(unittest.TestCase):
         self.assertIn("[反面词] 跑通 → 验证通过", out.getvalue())
 
 
+class RulesSelectionTest(unittest.TestCase):
+    def test_rules_banned_only_skips_length_and_synonyms(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write("有坑 → 已知冲突\n")
+            banned = f.name
+        out = io.StringIO()
+        sys.stdin = io.StringIO("先检查，再校验，这里有坑。" + "字" * 50 + "。")
+        try:
+            with redirect_stdout(out):
+                code = ste_check.main(["--strict", "--rules", "banned", "--banned", banned])
+        finally:
+            sys.stdin = sys.__stdin__
+            os.unlink(banned)
+        self.assertEqual(code, 1)
+        self.assertIn("[反面词] 有坑", out.getvalue())
+        self.assertNotIn("[句长]", out.getvalue())
+        self.assertNotIn("[同义词]", out.getvalue())
+
+    def test_rules_unknown_name_exits_two(self):
+        out, err = io.StringIO(), io.StringIO()
+        sys.stdin = io.StringIO("正文。")
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                code = ste_check.main(["--rules", "lengthh"])
+        finally:
+            sys.stdin = sys.__stdin__
+        self.assertEqual(code, 2)
+        self.assertIn("lengthh", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

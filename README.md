@@ -75,6 +75,7 @@ python3 scripts/ste_check.py 文件.md               # 只提示
 python3 scripts/ste_check.py --strict 文件.md      # 有命中退出码 1，给提交钩子用
 python3 scripts/ste_check.py --json 文件.md        # 结构化输出
 python3 scripts/ste_check.py --banned 行话表.txt 文件.md   # 叠加项目自己的反面词表，可重复
+python3 scripts/ste_check.py --rules banned 文件.md       # 只跑反面词检查，可选 length、synonym、banned
 echo "文本" | python3 scripts/ste_check.py        # 读标准输入
 ```
 
