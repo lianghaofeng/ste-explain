@@ -53,7 +53,7 @@ python3 -m unittest scripts/test_ste_check.py
 
 | 层 | 内容 |
 | --- | --- |
-| 80% 规则，九条 | 一句一事；一句不超过 45 字；主动语态；用动词不用名词化；一词一义；用数字和场景不打比方；序列用清单、比较用表格；一段一主题且重点句放段首；术语首现定义 |
+| 80% 规则，十条 | 一句一事；一句不超过 45 字；主动语态；用动词不用名词化；一词一义；用数字和场景不打比方；序列用清单、比较用表格；一段一主题且重点句放段首；术语首现定义；用评审会上能说出口的词 |
 | 100% 追加，五条 | 每条指令单独成句用祈使句；不省略主语；不用缩略语；安全类先写后果；每句对应一条事实，推断单独标注 |
 | 守则，高于规则 | 保留不确定程度；不新增原因与机制；代码与报错原文不改；事实与推断分开标注；清楚即止；已合规不硬改 |
 | 图 | 三个以上相互作用的部件或有状态变化时加 mermaid 图，一图一事，箭头带动词 |
@@ -62,21 +62,23 @@ python3 -m unittest scripts/test_ste_check.py
 
 ## 4. 脚本
 
-`skills/ste-explain/scripts/ste_check.py` 做两项确定性检查：
+`skills/ste-explain/scripts/ste_check.py` 做三项确定性检查：
 
 | 检查 | 规则 | 输出 |
 | --- | --- | --- |
 | 句长 | 一个句号内字数超过上限（默认 45；CJK 一字算 1，ASCII 串算 1） | `文件:行号 [句长] 68 字，上限 45：<前 30 字>` |
 | 同义词轮换 | 同一文档里同一组词出现两个以上，组在 `references/synonyms.txt` | `文件 [同义词] 检查 / 校验 同组出现 2 个词：检查 第 12、30 行；校验 第 18 行` |
+| 反面词 | 口水词、空洞强调词、直译造词，表在 `references/banned-words.txt`，每条带替换建议 | `文件:行号 [反面词] 至关重要 → 重要` |
 
 ```bash
 python3 scripts/ste_check.py 文件.md               # 只提示
 python3 scripts/ste_check.py --strict 文件.md      # 有命中退出码 1，给提交钩子用
 python3 scripts/ste_check.py --json 文件.md        # 结构化输出
+python3 scripts/ste_check.py --banned 行话表.txt 文件.md   # 叠加项目自己的反面词表，可重复
 echo "文本" | python3 scripts/ste_check.py        # 读标准输入
 ```
 
-围栏代码块、行内代码、链接目标、HTML 注释不检查。
+围栏代码块、行内代码、链接目标、引用块、HTML 注释不检查。文档里要成段引用反面词或长句示例时，用 `<!-- ste_check:off -->` 与 `<!-- ste_check:on -->` 包住，单行用 `<!-- ste_check:skip -->`。
 
 ## 5. 不做的事
 

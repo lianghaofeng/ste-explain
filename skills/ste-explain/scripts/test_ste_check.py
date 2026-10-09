@@ -24,7 +24,7 @@ class CleanLinesTest(unittest.TestCase):
         self.assertIn("文档", line)
 
     def test_multiline_html_comment_skipped(self):
-        text = "正文。\n<!-- check_banned:off\n反例一。\n反例二。\n-->\n正文二。"
+        text = "正文。\n<!-- 下面是注释\n反例一。\n反例二。\n-->\n正文二。"
         lines = ste_check.clean_lines(text)
         joined = "".join(l for _, l in lines)
         self.assertNotIn("反例", joined)
@@ -211,6 +211,90 @@ class FileErrorTest(unittest.TestCase):
             os.unlink(path)
         self.assertEqual(code, 0)
         self.assertIn(f"{path}:1 [句长] 6 字，上限 5", out.getvalue())
+
+
+class MarkerAndQuoteTest(unittest.TestCase):
+    def test_blockquote_skipped(self):
+        text = "> " + "字" * 50 + "。\n正文。"
+        self.assertEqual([no for no, _ in ste_check.clean_lines(text)], [2])
+
+    def test_off_on_markers_skip_region(self):
+        text = "正文一。\n<!-- ste_check:off -->\n反例。\n<!-- ste_check:on -->\n正文二。"
+        self.assertEqual([no for no, _ in ste_check.clean_lines(text)], [1, 5])
+
+    def test_skip_marker_skips_one_line(self):
+        text = "正文一。\n反例。 <!-- check_banned:skip -->\n正文二。"
+        self.assertEqual([no for no, _ in ste_check.clean_lines(text)], [1, 3])
+
+
+class BannedWordTest(unittest.TestCase):
+    def _rules(self, body):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write(body)
+            path = f.name
+        rules = ste_check.load_banned(path)
+        os.unlink(path)
+        return rules
+
+    def test_load_banned_formats(self):
+        rules = self._rules("# 注释\n有坑 → 已知冲突\n翻转 → 回滚 ! 图像 行为\nre:在.*的情况下 → 删掉\n没有箭头的行\n")
+        self.assertEqual(len(rules), 3)
+        self.assertEqual(rules[0][:3], ("substring", "有坑", "已知冲突"))
+        self.assertEqual(rules[1][3], ["图像", "行为"])
+        self.assertEqual(rules[2][0], "regex")
+
+    def test_substring_hit_with_suggestion(self):
+        rules = self._rules("有坑 → 已知冲突\n")
+        found = ste_check.check_banned("这里有坑。", rules, "t.md")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["rule"], "banned-word")
+        self.assertEqual(found[0]["message"], "t.md:1 [反面词] 有坑 → 已知冲突")
+
+    def test_exception_prefix_suppresses(self):
+        rules = self._rules("翻转 → 回滚 ! 图像 行为\n")
+        self.assertEqual(ste_check.check_banned("图像翻转后保存。", rules, "t.md"), [])
+        self.assertEqual(len(ste_check.check_banned("配置翻转回去。", rules, "t.md")), 1)
+
+    def test_regex_hit(self):
+        rules = self._rules("re:在.*的情况下 → 删掉\n")
+        found = ste_check.check_banned("在网络断开的情况下重试。", rules, "t.md")
+        self.assertEqual(found[0]["message"], "t.md:1 [反面词] 在网络断开的情况下 → 删掉")
+
+    def test_code_and_quote_not_checked(self):
+        rules = self._rules("有坑 → 已知冲突\n")
+        self.assertEqual(ste_check.check_banned("`有坑`\n> 有坑\n```\n有坑\n```", rules, "t.md"), [])
+
+    def test_cli_explicit_missing_banned_exits_two(self):
+        out, err = io.StringIO(), io.StringIO()
+        sys.stdin = io.StringIO("正文。")
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                code = ste_check.main(["--banned", "/nonexistent/banned.txt"])
+        finally:
+            sys.stdin = sys.__stdin__
+        self.assertEqual(code, 2)
+        self.assertIn("/nonexistent/banned.txt", err.getvalue())
+
+    def test_cli_banned_repeatable(self):
+        import tempfile
+        paths = []
+        for body in ("有坑 → 已知冲突\n", "跑通 → 验证通过\n"):
+            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+                f.write(body)
+                paths.append(f.name)
+        out = io.StringIO()
+        sys.stdin = io.StringIO("有坑，但跑通了。")
+        try:
+            with redirect_stdout(out):
+                code = ste_check.main(["--strict", "--banned", paths[0], "--banned", paths[1]])
+        finally:
+            sys.stdin = sys.__stdin__
+            for p in paths:
+                os.unlink(p)
+        self.assertEqual(code, 1)
+        self.assertIn("[反面词] 有坑 → 已知冲突", out.getvalue())
+        self.assertIn("[反面词] 跑通 → 验证通过", out.getvalue())
 
 
 if __name__ == "__main__":
