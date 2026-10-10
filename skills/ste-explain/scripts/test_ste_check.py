@@ -256,6 +256,13 @@ class BannedWordTest(unittest.TestCase):
         self.assertEqual(ste_check.check_banned("图像翻转后保存。", rules, "t.md"), [])
         self.assertEqual(len(ste_check.check_banned("配置翻转回去。", rules, "t.md")), 1)
 
+    def test_default_list_catches_written_register_phrases(self):
+        # 规则 11 的口语短语：命中「搬到」「这一路」，放过「这一路径」「这一路由」
+        rules = ste_check.load_banned(ste_check.DEFAULT_BANNED)
+        self.assertEqual(len(ste_check.check_banned("HTTP 搬到 7999。", rules, "t.md")), 1)
+        self.assertEqual(len(ste_check.check_banned("这一路位姿下线。", rules, "t.md")), 1)
+        self.assertEqual(ste_check.check_banned("这一路径不变，这一路由表不变。", rules, "t.md"), [])
+
     def test_regex_hit(self):
         rules = self._rules("re:在.*的情况下 → 删掉\n")
         found = ste_check.check_banned("在网络断开的情况下重试。", rules, "t.md")
